@@ -1,17 +1,3 @@
-// Copyright 2017 Xiaomi, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package cron
 
 import (
@@ -20,6 +6,7 @@ import (
 	"github.com/open-falcon/falcon-plus/modules/alarm/model"
 	"github.com/open-falcon/falcon-plus/modules/alarm/redi"
 	"github.com/toolkits/net/httplib"
+	"strings"
 	"time"
 )
 
@@ -46,14 +33,19 @@ func SendIM(im *model.IM) {
 		<-IMWorkerChan
 	}()
 
-	url := g.Config().Api.IM
-	r := httplib.Post(url).SetTimeout(5*time.Second, 30*time.Second)
-	r.Param("tos", im.Tos)
-	r.Param("content", im.Content)
-	resp, err := r.String()
-	if err != nil {
-		log.Errorf("send im fail, tos:%s, content:%s, error:%v", im.Tos, im.Content, err)
+	if strings.HasPrefix(im.Tos, g.Config().Api.IMDingPrefix) {
+		url := g.Config().Api.IM
+		r := httplib.Post(url).SetTimeout(5*time.Second, 30*time.Second)
+		r.Param("tos", strings.Replace(im.Tos, g.Config().Api.IMDingPrefix, "[ding]:", 1))
+		r.Param("content", im.Content)
+		resp, err := r.String()
+		if err != nil {
+			log.Errorf("send im fail, tos:%s, cotent:%s, error:%v", im.Tos, im.Content, err)
+		}
+
+		log.Debugf("send im:%v, resp:%v, url:%s", im, resp, url)
+	} else {
+		log.Debugf("Skipping HTTP request for im.Tos: %s", im.Tos)
 	}
 
-	log.Debugf("send im:%v, resp:%v, url:%s", im, resp, url)
 }
