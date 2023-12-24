@@ -1,21 +1,8 @@
-// Copyright 2017 Xiaomi, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package cron
 
 import (
 	"encoding/json"
+
 	log "github.com/Sirupsen/logrus"
 
 	cmodel "github.com/open-falcon/falcon-plus/common/model"
@@ -35,9 +22,13 @@ func consume(event *cmodel.Event, isHigh bool) {
 		return
 	}
 
-	if action.Callback == 1 {
-		HandleCallback(event, action)
+	if event.Priority() < 3 {
+		if action.Callback == 1 {
+			HandleCallback(event, action)
+		}
 	}
+	//回调告警降噪系统
+	HandleAlarmCallback(event, action)
 
 	if isHigh {
 		consumeHighEvents(event, action)
@@ -55,16 +46,17 @@ func consumeHighEvents(event *cmodel.Event, action *api.Action) {
 	phones, mails, ims := api.ParseTeams(action.Uic)
 
 	smsContent := GenerateSmsContent(event)
+	emailSubject := BuildEmailTitle(event)
 	mailContent := GenerateMailContent(event)
 	imContent := GenerateIMContent(event)
 
 	// <=P2 才发送短信
-	if event.Priority() < 3 {
+	if event.Priority() < 5 {
 		redi.WriteSms(phones, smsContent)
 	}
 
 	redi.WriteIM(ims, imContent)
-	redi.WriteMail(mails, smsContent, mailContent)
+	redi.WriteMail(mails, emailSubject, mailContent)
 
 }
 
@@ -121,7 +113,8 @@ func ParseUserMail(event *cmodel.Event, action *api.Action) {
 	userMap := api.GetUsers(action.Uic)
 
 	metric := event.Metric()
-	subject := GenerateSmsContent(event)
+	// subject := GenerateSmsContent(event)
+	emailSubject := BuildEmailTitle(event)
 	content := GenerateMailContent(event)
 	status := event.Status
 	priority := event.Priority()
@@ -135,7 +128,7 @@ func ParseUserMail(event *cmodel.Event, action *api.Action) {
 		dto := MailDto{
 			Priority: priority,
 			Metric:   metric,
-			Subject:  subject,
+			Subject:  emailSubject,
 			Content:  content,
 			Email:    user.Email,
 			Status:   status,
